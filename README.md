@@ -25,6 +25,8 @@ This is the core application directory. It contains various modules grouped by r
 
 * Marks the directory as a Python package.
 
+
+> Read more about the structrue and working at docs_main.md [Main Documentation](./docs_main.md)  
 ----
 #### 🔄 Interconnections Between Files
 
@@ -48,6 +50,9 @@ Contains FastAPI routers that expose REST API endpoints:
 | `chat_messages.py`   | Manages chat histories, conversation state, message flow.                                    |
 | `files.py`           | Handles file uploads, parsing, and metadata processing.                                      |
 | `web_search.py`      | Exposes search functionalities using external search or internal retrieval mechanisms.       |
+
+
+> Read more about the structrue and working at docs_main.md [Routers Documentation](app/routers/docs_routers.md)  
 
 ---
 
@@ -74,6 +79,9 @@ This folder implements core services that support the endpoints:
 | `web_search_services.py` | Implements the logic behind `web_search.py`, possibly calling external APIs or internal search algorithms. |
 | `vision_model_test.png`  | Static image, possibly a placeholder or test asset.                                                        |
 
+> Read more about the structrue and working at docs_main.md [Services Documentation](app/services/docs_services.md)    
+
+
 ---
 
 ## 📁 `app/utils/` – Helper Functions and Utilities
@@ -86,6 +94,8 @@ This folder contains utility modules to support other components:
 | `geojson_utils.py` | Validates and processes GeoJSON coordinates returned from searches or user input.                          |
 | `logging.py`       | Sets up and configures custom logging across the application.                                              |
 | `redis_client.py`  | Handles Redis connections and operations (e.g., retrieving and storing chat history, cache management).    |
+
+> Read more about the structrue and working at docs_main.md [Utils Documentation](app/utils/docs_utils.md)  
 
 ---
 
