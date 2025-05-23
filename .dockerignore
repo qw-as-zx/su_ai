@@ -1,0 +1,35 @@
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.so
+*.egg
+*.egg-info/
+dist
+build
+
+# Virtual environments
+venv/
+.env
+*.env
+
+# Logs and runtime output
+*.log
+logs/
+temp/
+vector_stores/
+*.wav
+#*.txt
+*.docx
+
+# Docker & Git
+.dockerignore
+.git/
+.gitignore
+docker-compose.yml
+Dockerfile
+
+# Development tools and metadata
+README.md
+LICENSE
+Makefile
+*.ipynb

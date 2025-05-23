@@ -1,0 +1,114 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Django stuff:
+*.log
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+target/
+
+# IPython
+.profile_default/
+ipython_config.py
+
+# VS Code
+.vscode/
+
+# PyCharm
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor swap files
+.*.swp
+.*.swo
+
+# Python version
+.python-version
+
+# Ignore configuration secrets
+app/utils/config.py
+
+# Ignore logs
+logs/
+
+# Ignore test data and outputs
+catalog_rag_data.json
+coordinate_corrections.html
+suadeo_catalog_data/
+token.txt
+test_suadeo_search.py
+
+# Ignore virtual environments (redundant, but explicit here)
+venv/
+
+# Allow these hidden files to be tracked
+!.dockerignore
+!.env
+!.github/
+!.gitignore
+!.gitlab-ci.yml
+!.mypy.ini
+!.pre-commit-config.yaml
+!.readthedocs.yml
+!.renovaterc.json

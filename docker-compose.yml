@@ -1,0 +1,92 @@
+## setup to use when we already have a remote ollama with url and auth
+services:
+  rag-app:
+    build:
+      context: .
+    container_name: rag-app
+    restart: always  
+    ports:
+      - "8000:8000"
+    environment:
+      - OLLAMA_BASE_URL=http://172.16.1.4:11434 #http://your-remote-ollama-host:11434  # <-- Replace with actual remote URL
+      - OLLAMA_KEEP_ALIVE=120m 
+    volumes:
+      - ./logs:/app/logs
+      - ./temp:/app/temp
+      - ./vector_stores:/app/vector_stores
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 300s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+
+
+
+
+## Setup for using ollama and rag-app on the same host
+# networks:
+#   ollama-network:
+#     driver: bridge
+
+# services:
+#   ollama:
+#     image: ollama/ollama
+#     container_name: ollama
+#     restart: always  
+#     volumes:
+#       - ollama_data:/root/.ollama  
+#     ports:
+#       - "11434:11434"  
+#     networks:
+#       - ollama-network
+#     environment:
+#       - OLLAMA_MODELS=/root/.ollama/models
+#       - OLLAMA_KEEP_ALIVE=120m 
+#     healthcheck:
+#       test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+#       interval: 300s
+#       timeout: 10s
+#       retries: 3
+#     logging:
+#       driver: "json-file"
+#       options:
+#         max-size: "10m"
+#         max-file: "3"
+
+#   rag-app:
+#     build:
+#       context: .
+#     container_name: rag-app
+#     restart: always  
+#     depends_on:
+#       - ollama
+#     ports:
+#       - "8000:8000"
+#     environment:
+#       - OLLAMA_BASE_URL=http://ollama:11434
+#       - OLLAMA_KEEP_ALIVE=120m 
+#     volumes:
+#       - ./logs:/app/logs
+#       - ./temp:/app/temp
+#       - ./vector_stores:/app/vector_stores
+#     healthcheck:
+#       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+#       interval: 300s
+#       timeout: 10s
+#       retries: 3
+#     logging:
+#       driver: "json-file"
+#       options:
+#         max-size: "20m"
+#         max-file: "3"
+#     networks:
+#       - ollama-network
+
+# volumes:
+#   ollama_data:
