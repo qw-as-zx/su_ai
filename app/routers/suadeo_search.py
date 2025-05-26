@@ -74,8 +74,10 @@ async def suadeo_search(
                 dataset_name=source['dataset_name'],
                 content_type=source['content_type'],
                 similarity=source['similarity'],
-                catalog=source['catalog'],
+                # catalog=source['catalog'],
+                catalog=source['catalog'] or 'Unknown',
                 source_endpoint=source['source_endpoint'],
+                source_endpoint_type=source['source_endpoint_type'],
                 chunk=source['chunk']  # or chunk_text=source['chunk']['content']
                 # chunk_text=source['chunk_text']  # MAP THIS TOO
             )

@@ -69,7 +69,7 @@ class OllamaEmbeddings:
         except Exception as e:
             raise EmbeddingGenerationError(f"Error generating embedding: {e}")
     
-    def embed_batch(self, texts: List[str], batch_size: int = 40) -> np.ndarray:
+    def embed_batch(self, texts: List[str], batch_size: int = 100) -> np.ndarray:
         """
         Get embeddings for multiple texts in batches
         

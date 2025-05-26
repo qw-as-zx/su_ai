@@ -17,6 +17,7 @@ class SearchSource(BaseModel):
     similarity: float
     catalog: str
     source_endpoint: str
+    source_endpoint_type: str
     chunk: Dict
 
 class SuadeoSearchResponse(BaseModel):
