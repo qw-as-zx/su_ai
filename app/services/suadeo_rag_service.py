@@ -50,32 +50,36 @@ class SuadeoRAGService:
             force_rebuild: Whether to force rebuild the index
         """
         try:
-            endpoints = [
-                "api/administration/userdata",
-                "api/administration/catalogs",
-                "api/BusinessGlossary",
-                "api/administration/connections"
-            ]
+            endpoints = {
+                "api/administration/userdata": "4",
+                "api/administration/catalogs": "15",
+                "api/BusinessGlossary": "11",
+                "api/administration/connections": "5"
+            }
             
             # Aggregate data from all endpoints
             all_search_chunks = []
-            for endpoint in endpoints:
-                logger.info(f"Fetching catalog data from {endpoint}...")
-                catalog_data = fetch_catalog_data(endpoint)
+            for endpoint_url, endpoint_type in endpoints.items():
+                logger.info(f"Fetching catalog data from {endpoint_url}...")
+                catalog_data = fetch_catalog_data(endpoint_url)
                 
                 if not catalog_data:
-                    logger.warning(f"No data retrieved from {endpoint}")
+                    logger.warning(f"No data retrieved from {endpoint_url}")
                     continue
                 
                 # Process catalog data for RAG
-                rag_data = self._process_catalog_data(catalog_data, endpoint)
+                # Pass both endpoint URL and ID if needed
+                endpoint_info = {"url": endpoint_url, "id": endpoint_type}
+                rag_data = self._process_catalog_data(catalog_data, endpoint_url, endpoint_type)
+                
                 if rag_data and 'search_index' in rag_data:
                     all_search_chunks.extend(rag_data['search_index'])
-                    logger.info(f"Collected {len(rag_data['search_index'])} chunks from {endpoint}")
+                    logger.info(f"Collected {len(rag_data['search_index'])} chunks from {endpoint_url}")
                 
                 # Save individual endpoint data
-                save_rag_data(rag_data, f"suadeo_catalog_data/rag_data_{endpoint.replace('/', '_')}.json")
-            
+                safe_filename = endpoint_url.replace('/', '_')
+                save_rag_data(rag_data, f"suadeo_catalog_data/rag_data_{safe_filename}.json")
+
             # Update self.rag_data with all collected chunks
             self.rag_data['search_index'] = all_search_chunks
             save_rag_data(self.rag_data, "suadeo_catalog_data/rag_data_all.json")
@@ -97,7 +101,7 @@ class SuadeoRAGService:
             logger.error(f"Failed to initialize RAG system: {e}")
             raise SuadeoRAGException(f"Initialization failed: {e}")
     
-    def _process_catalog_data(self, catalog_data: Dict, source_endpoint: str) -> Dict:
+    def _process_catalog_data(self, catalog_data: Dict, source_endpoint: str,  source_type: str) -> Dict:
         """
         Process catalog data into RAG-friendly format
         
@@ -108,7 +112,7 @@ class SuadeoRAGService:
         Returns:
             Processed RAG data
         """
-        rag_data = parse_catalog_for_rag(catalog_data, source_endpoint)
+        rag_data = parse_catalog_for_rag(catalog_data, source_endpoint, source_type)
         return rag_data
     
     async def _load_existing_index(self):
@@ -129,7 +133,7 @@ class SuadeoRAGService:
         logger.info(f"Creating embeddings for {len(texts)} chunks...")
         
         # Create embeddings for all texts
-        embeddings = self.embeddings.embed_batch(texts, batch_size=100)
+        embeddings = self.embeddings.embed_batch(texts, batch_size=200)
         
         # Initialize vector store
         self.vector_store = FAISSVectorStore(dimension=embeddings.shape[1])
@@ -154,7 +158,7 @@ class SuadeoRAGService:
         logger.info(f"Updating index with {len(texts)} new chunks...")
         
         # Create embeddings for new chunks
-        embeddings = self.embeddings.embed_batch(texts, batch_size=50)
+        embeddings = self.embeddings.embed_batch(texts, batch_size=200)
         
         # Add new vectors to existing index
         self.vector_store.add_vectors(embeddings, new_chunks)
@@ -241,7 +245,8 @@ class SuadeoRAGService:
             owner = metadata.get("owner", "Unknown")
             language = metadata.get("language", "Unknown")
             source_endpoint = metadata.get("source_endpoint", "Unknown")
-            context_part += f"\n(Dataset: {dataset_name}, Catalog: {catalog}, ID: {dataset_id}, Status: {status}, Owner: {owner}, Language: {language}, Source Endpoint: {source_endpoint})"
+            source_endpoint_type = metadata.get("source_endpoint_type", "Unknown")
+            context_part += f"\n(Dataset: {dataset_name}, Catalog: {catalog}, ID: {dataset_id}, Status: {status}, Owner: {owner}, Language: {language}, Source Endpoint: {source_endpoint}, Source Endpoint type: {source_endpoint_type})"
             if domains := metadata.get("domains"):
                 context_part += f"\nDomains: {', '.join(domains)}"
             context_parts.append(context_part)
@@ -260,7 +265,8 @@ class SuadeoRAGService:
                 - Use only the information provided in the context
                 - If insufficient, explicitly say so
                 - Mention dataset names, languages, source endpoints, dataset id and details (e.g., catalog, owner, status, source endpoint) when possible
-                - Be concise but detailed
+                - Be concise but detailed.
+                - If you find even 1 chunk with above 70% similarity use that and fully answer.
 
                 Answer:"""
         
@@ -282,7 +288,6 @@ class SuadeoRAGService:
         except Exception as e:
             logger.error(f"Error generating response: {e}")
             return "Sorry, there was an error generating the response."
-    
     async def search(self, query: str, k: int = 5) -> RAGResponse:
         """
         Main search method
@@ -295,7 +300,7 @@ class SuadeoRAGService:
             RAGResponse with answer and metadata
         """
         if not self._is_initialized:
-            raise IndexNotInitializedError("RAG system not initialized. Call initialize() first.")
+            raise IndexNotInitializedError("RAG system not initialized. Call initialize first.")
         
         if not self.vector_store or self.vector_store.is_empty:
             raise IndexNotInitializedError("Vector store is empty or not loaded")
@@ -305,6 +310,25 @@ class SuadeoRAGService:
         try:
             query_embedding = self.embeddings.embed_text(query)
             similarities, indices, retrieved_chunks = self.vector_store.search(query_embedding, k=k)
+            
+            # Deduplicate chunks based on chunk ID
+            unique_chunks = []
+            seen_ids = set()
+            for sim, chunk in zip(similarities, retrieved_chunks):
+                chunk_id = chunk.get('id', '')
+                if chunk_id not in seen_ids:
+                    unique_chunks.append((sim, chunk))
+                    seen_ids.add(chunk_id)
+            
+            # Separate similarities and chunks after deduplication
+            if unique_chunks:
+                similarities, retrieved_chunks = zip(*unique_chunks)
+                similarities = np.array(similarities)
+                retrieved_chunks = list(retrieved_chunks)
+            else:
+                similarities = np.array([])
+                retrieved_chunks = []
+            
             has_sufficient_context = self._assess_context_sufficiency(similarities, retrieved_chunks)
             
             relevant_chunks = []
@@ -312,14 +336,16 @@ class SuadeoRAGService:
             for sim, chunk in zip(similarities, retrieved_chunks):
                 if sim >= self.config.min_similarity_threshold:
                     relevant_chunks.append(chunk)
-                    catalog_value = chunk.get('metadata', {}).get('catalog', 'Unknown')
+                    catalog_value = chunk.get('metadata', {}).get('catalog') or 'Unknown'  # Ensure None is replaced
                     source_endpoint = chunk.get('metadata', {}).get('source_endpoint', 'Unknown')
+                    source_endpoint_type = chunk.get('metadata', {}).get('source_endpoint_type', 'Unknown')
                     relevant_sources.append({
                         'dataset_name': chunk.get('metadata', {}).get('dataset_name', 'Unknown'),
                         'content_type': chunk.get('content_type', 'unknown'),
                         'similarity': float(sim),
                         'catalog': catalog_value,
                         'source_endpoint': source_endpoint,
+                        "source_endpoint_type":source_endpoint_type,
                         'chunk': chunk
                     })
             
@@ -330,6 +356,7 @@ class SuadeoRAGService:
                 answer = "I don't have sufficient information in our catalog to answer this question accurately."
                 confidence = 0.0
             
+            logger.debug(f"Returning {len(relevant_sources)} unique sources for query: {query}")
             return RAGResponse(
                 answer=answer,
                 confidence=confidence,
@@ -341,7 +368,7 @@ class SuadeoRAGService:
         except Exception as e:
             logger.error(f"Search failed: {e}")
             raise SuadeoRAGException(f"Search operation failed: {e}")
-    
+        
     async def refresh_data(self):
         """Refresh catalog data and rebuild index"""
         logger.info("Refreshing catalog data...")

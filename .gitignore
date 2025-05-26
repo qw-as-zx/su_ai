@@ -98,7 +98,6 @@ coordinate_corrections.html
 suadeo_catalog_data/
 token.txt
 test_suadeo_search.py
-
 # Ignore virtual environments (redundant, but explicit here)
 venv/
 

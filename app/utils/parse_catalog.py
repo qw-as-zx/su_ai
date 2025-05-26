@@ -8,7 +8,7 @@ from app.utils.logging import get_logger
 # Create a logger specific to this module
 logger = get_logger("app.routers.parse_catalog")
 
-def parse_catalog_for_rag(catalog_response: List[Dict], source_endpoint: str) -> Dict[str, Any]:
+def parse_catalog_for_rag(catalog_response: List[Dict], source_endpoint: str,  source_type: str) -> Dict[str, Any]:
     """
     Parse catalog response into RAG-optimized format
     
@@ -28,7 +28,8 @@ def parse_catalog_for_rag(catalog_response: List[Dict], source_endpoint: str) ->
             "active_datasets": 0,
             "catalogs": set(),
             "domains": set(),
-            "source_endpoint": source_endpoint
+            "source_endpoint": source_endpoint,
+            "source_endpoint_type":source_type
         },
         "datasets": [],
         "search_index": []
@@ -56,7 +57,7 @@ def parse_catalog_for_rag(catalog_response: List[Dict], source_endpoint: str) ->
         rag_data["datasets"].append(dataset)
         
         # Create search index entries
-        search_entries = create_search_entries(dataset, source_endpoint)
+        search_entries = create_search_entries(dataset, source_endpoint,source_type)
         rag_data["search_index"].extend(search_entries)
     
     # Convert sets to lists for JSON serialization
@@ -103,7 +104,8 @@ def parse_single_dataset(item: Dict) -> Dict[str, Any]:
         "name": item.get('name', ''),
         "status": item.get('status', 0),
         "status_text": get_status_text(item.get('status', 0)),
-        "catalog": item.get('catalog'),
+        # "catalog": item.get('catalog'),
+        'catalog': item.get('catalog', 'Unknown') or 'Unknown',
         "domains": item.get('domains', []),
         "descriptions": descriptions,
         "owner": owner_info,
@@ -124,7 +126,7 @@ def parse_single_dataset(item: Dict) -> Dict[str, Any]:
     
     return dataset
 
-def create_search_entries(dataset: Dict, source_endpoint: str) -> List[Dict]:
+def create_search_entries(dataset: Dict, source_endpoint: str, source_type: str) -> List[Dict]:
     """Create search index entries for RAG applications"""
     
     search_entries = []
@@ -136,7 +138,8 @@ def create_search_entries(dataset: Dict, source_endpoint: str) -> List[Dict]:
         "domains": dataset["domains"],
         "status": dataset["status_text"],
         "owner": dataset["owner"]["display_name"],
-        "source_endpoint": source_endpoint
+        "source_endpoint": source_endpoint,
+        "source_endpoint_type": source_type
     }
     
     # Create entry for dataset name and basic info
