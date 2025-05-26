@@ -58,6 +58,7 @@ async def map_search(
     try:
         result = await web_search_service.perform_map_search(
             query=request.query,
+            search_context_size=request.search_context_size,
             user_id="default",
             # user_location=request.user_location
         )

@@ -7,6 +7,9 @@ from app.models.suadeo_models import (
     SearchSource,
     SuadeoRAGConfig
 )
+
+from datetime import datetime
+
 from app.services.suadeo_rag_service import SuadeoRAGService
 from app.exceptions.suadeo_exceptions import (
     SuadeoRAGException,
@@ -72,6 +75,7 @@ async def suadeo_search(
                 content_type=source['content_type'],
                 similarity=source['similarity'],
                 catalog=source['catalog'],
+                source_endpoint=source['source_endpoint'],
                 chunk=source['chunk']  # or chunk_text=source['chunk']['content']
                 # chunk_text=source['chunk_text']  # MAP THIS TOO
             )
@@ -172,5 +176,5 @@ async def health_check():
     return {
         "status": "ok",
         "service": "Suadeo Search API",
-        "timestamp": "2024-01-01T00:00:00Z"  # You might want to use actual timestamp
+        "timestamp": datetime.utcnow().isoformat() + "Z" #"2024-01-01T00:00:00Z"  # You might want to use actual timestamp
     }

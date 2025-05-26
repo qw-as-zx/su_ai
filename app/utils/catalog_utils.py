@@ -50,7 +50,7 @@ def get_token(base_url: str) -> Optional[str]:
         logger.error(f"Error getting token: {e}")
         return None
 
-def get_catalogs(base_url: str, token: str) -> Optional[Dict[str, Any]]:
+def get_catalogs(endpoint:str, token: str, base_url: str, ) -> Optional[Dict[str, Any]]:
     """
     Get catalogs using authentication token
     
@@ -63,7 +63,7 @@ def get_catalogs(base_url: str, token: str) -> Optional[Dict[str, Any]]:
     """
     payload = {
         "method": "GET",
-        "endpoint": "api/userdata/new",
+        "endpoint": endpoint, #"api/userdata/new",
         "data": "{}",
         "dataType": "json",
         "contentType": "application/json"
@@ -85,7 +85,8 @@ def get_catalogs(base_url: str, token: str) -> Optional[Dict[str, Any]]:
         logger.error(f"Error getting catalogs: {e}")
         return None
 
-def fetch_catalog_data(api_url: str = "https://webclient-demo.suadeo.com/apiservice") -> Optional[Dict[str, Any]]:
+
+def fetch_catalog_data(endpoint: str, api_url: str = "https://webclient-demo.suadeo.com/apiservice") -> Optional[Dict[str, Any]]:
     """
     Fetch complete catalog data from Suadeo API
     
@@ -104,7 +105,7 @@ def fetch_catalog_data(api_url: str = "https://webclient-demo.suadeo.com/apiserv
         return None
     
     # Get catalogs
-    catalog_data = get_catalogs(api_url, token)
+    catalog_data = get_catalogs(endpoint, token, api_url)
     if not catalog_data:
         logger.error("Failed to get catalog data")
         return None

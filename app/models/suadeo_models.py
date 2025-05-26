@@ -16,8 +16,7 @@ class SearchSource(BaseModel):
     content_type: str
     similarity: float
     catalog: str
-    # catalog: Optional[str] = None
-    #chunk_text: str
+    source_endpoint: str
     chunk: Dict
 
 class SuadeoSearchResponse(BaseModel):
@@ -31,19 +30,12 @@ class SuadeoSearchResponse(BaseModel):
 
 class SuadeoRAGConfig(BaseModel):
     """Configuration for Suadeo RAG system"""
-    embedding_model: str = settings.embedding_model # "mxbai-embed-large:latest"
-    ollama_base_url: str = settings.ollama_base_url  #"XXXXXXXXXXXXXXXXXXXXXX"
-    llm_model: str =  settings.ollama_model  #"mistral-nemo:12b"
-    min_similarity_threshold: float = settings.min_similarity_threshold #0.7
-    min_context_chunks: int = settings.min_context_chunks #2
-    index_rebuild_threshold: int = settings.index_rebuild_threshold #1000  # Rebuild index if data changes exceed this
-
-    # embedding_model: str = "mxbai-embed-large:latest"
-    # ollama_base_url: str = "http://localhost:11434"
-    # llm_model: str = "mistral-nemo:12b"
-    # min_similarity_threshold: float = 0.7
-    # min_context_chunks: int = 2
-    # index_rebuild_threshold: int = 1000  # Rebuild index if data changes exceed this
+    embedding_model: str = settings.embedding_model
+    ollama_base_url: str = settings.ollama_base_url
+    llm_model: str = settings.ollama_model
+    min_similarity_threshold: float = settings.min_similarity_threshold
+    min_context_chunks: int = settings.min_context_chunks
+    index_rebuild_threshold: int = settings.index_rebuild_threshold
 
 @dataclass
 class RAGResponse:

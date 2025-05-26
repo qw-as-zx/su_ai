@@ -20,7 +20,7 @@ class WebSearchService:
     async def perform_web_search(
         self,
         query: str,
-        search_context_size: str = "medium",
+        search_context_size: str = "high", # low, medium, high
         user_id: str = "default"
     ) -> Dict[str, Any]:
         """
@@ -116,11 +116,19 @@ class WebSearchService:
     async def perform_map_search(
         self,
         query: str,
+        search_context_size: str = "high", 
         user_id: str = "default",
+        
     ) -> Dict[str, Any]:
         """
         Perform a map-specific web search and return both parsed GeoJSON data and citations.
         """
+        logger.info(f"Performing map search for query: {query}")
+        # Validate search_context_size
+        valid_context_sizes = {"high", "medium", "low"}
+        if search_context_size not in valid_context_sizes:
+            raise ValueError(f"search_context_size must be one of {valid_context_sizes}")
+
         rate_limit_key = f"map_search:rate_limit:{user_id}"
         current_time = int(time.time())
 
@@ -138,7 +146,7 @@ class WebSearchService:
                 try:
                     tool = {
                         "type": "web_search_preview",
-                        "search_context_size": "medium"
+                        "search_context_size": search_context_size
                     }
 
                     geojson_prompt = (

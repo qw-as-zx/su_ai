@@ -36,7 +36,7 @@ class SuadeoRAGService:
             base_url=config.ollama_base_url
         )
         self.vector_store: Optional[FAISSVectorStore] = None
-        self.rag_data: Optional[Dict] = None
+        self.rag_data: Dict = {'search_index': []}
         self.index_path = "suadeo_catalog_data/suadeo_index"
         self._is_initialized = False
         
@@ -44,107 +44,92 @@ class SuadeoRAGService:
     
     async def initialize(self, force_rebuild: bool = False):
         """
-        Initialize the RAG system with catalog data
+        Initialize the RAG system with catalog data from all endpoints
         
         Args:
             force_rebuild: Whether to force rebuild the index
         """
         try:
-            # Fetch fresh catalog data
-            logger.info("Fetching catalog data...")
-            catalog_data = fetch_catalog_data()
+            endpoints = [
+                "api/administration/userdata",
+                "api/administration/catalogs",
+                "api/BusinessGlossary",
+                "api/administration/connections"
+            ]
             
-            if not catalog_data:
-                raise CatalogDataError("Failed to fetch catalog data")
-            
-            # Process catalog data for RAG (you'll need to implement this based on your parse_catalogue.py)
-            self.rag_data = self._process_catalog_data(catalog_data)
-            save_rag_data(self.rag_data)
-
-            ## Some testing of the rag data
-            # Example of extracting content for embeddings
-            logger.info("\n\t\t=== Content for Vector Embeddings ===")
-            contents = get_search_content_only(self.rag_data)
-            for i, content in enumerate(contents):
-                logger.info(f"{i+1}. {content[:100]}...")
-                break
-            
-
-            ## Extra checks
-
-            logger.info("\n\t\t=== Filter German Descriptions only ===")
-            contents = filter_by_language(self.rag_data,'de')
-            for i, content in enumerate(contents):
-                logger.info(f"{i+1}. {content['content'][:100]}...")
-                break
-
-            logger.info("\n\t\t=== Active Datasets only ===")
-            contents = get_active_datasets_only(self.rag_data)
-            for i, content in enumerate(contents):
-                logger.info(f"{i+1}. {content['name'][:100]}...")  # or use 'id' or 'key'
-                break
-
-
-            logger.info("\n\t\t=== Filter Content Only ===")
-            contents = filter_by_catalog(self.rag_data,"JOP Paris 2024")
-            for i, content in enumerate(contents):
-                logger.info(f"{i+1}. {content['name'][:100]}...")
-                break
+            # Aggregate data from all endpoints
+            all_search_chunks = []
+            for endpoint in endpoints:
+                logger.info(f"Fetching catalog data from {endpoint}...")
+                catalog_data = fetch_catalog_data(endpoint)
                 
-                     
+                if not catalog_data:
+                    logger.warning(f"No data retrieved from {endpoint}")
+                    continue
+                
+                # Process catalog data for RAG
+                rag_data = self._process_catalog_data(catalog_data, endpoint)
+                if rag_data and 'search_index' in rag_data:
+                    all_search_chunks.extend(rag_data['search_index'])
+                    logger.info(f"Collected {len(rag_data['search_index'])} chunks from {endpoint}")
+                
+                # Save individual endpoint data
+                save_rag_data(rag_data, f"suadeo_catalog_data/rag_data_{endpoint.replace('/', '_')}.json")
+            
+            # Update self.rag_data with all collected chunks
+            self.rag_data['search_index'] = all_search_chunks
+            save_rag_data(self.rag_data, "suadeo_catalog_data/rag_data_all.json")
+            
             # Load or build vector index
             if os.path.exists(f"{self.index_path}.faiss") and not force_rebuild:
                 logger.info("Loading existing vector index...")
                 await self._load_existing_index()
+                # Update index with new or updated chunks
+                await self._update_index(all_search_chunks)
             else:
                 logger.info("Building new vector index...")
-                await self._build_new_index()
+                await self._build_new_index(all_search_chunks)
             
             self._is_initialized = True
-            logger.info("RAG system initialized successfully")
-            
+            logger.info(f"RAG system initialized successfully with {len(all_search_chunks)} total chunks")
+                
         except Exception as e:
             logger.error(f"Failed to initialize RAG system: {e}")
             raise SuadeoRAGException(f"Initialization failed: {e}")
     
-    def _process_catalog_data(self, catalog_data: Dict) -> Dict:
+    def _process_catalog_data(self, catalog_data: Dict, source_endpoint: str) -> Dict:
         """
         Process catalog data into RAG-friendly format
-        Note: This needs to be implemented based on your parse_catalogue.py logic
         
         Args:
             catalog_data: Raw catalog data from API
+            source_endpoint: API endpoint from which the data was fetched
             
         Returns:
             Processed RAG data
         """
-        rag_data = parse_catalog_for_rag(catalog_data)
+        rag_data = parse_catalog_for_rag(catalog_data, source_endpoint)
         return rag_data
     
     async def _load_existing_index(self):
         """Load existing vector index"""
-        # Get embedding dimension from first available text or use default
         sample_embedding = self.embeddings.embed_text("sample text for dimension")
-        
         self.vector_store = FAISSVectorStore(dimension=len(sample_embedding))
         self.vector_store.load(self.index_path)
     
-    async def _build_new_index(self):
+    async def _build_new_index(self, search_chunks: List[Dict]):
         """Build new vector index from RAG data"""
-        if not self.rag_data or not self.rag_data.get('search_index'):
+        if not search_chunks:
             raise CatalogDataError("No search index data available")
         
-        # Extract all searchable content
-        search_chunks = self.rag_data['search_index']
         texts = [chunk['content'] for chunk in search_chunks]
-        
         if not texts:
             raise CatalogDataError("No searchable content found in catalog data")
         
         logger.info(f"Creating embeddings for {len(texts)} chunks...")
         
         # Create embeddings for all texts
-        embeddings = self.embeddings.embed_batch(texts, batch_size=50)
+        embeddings = self.embeddings.embed_batch(texts, batch_size=100)
         
         # Initialize vector store
         self.vector_store = FAISSVectorStore(dimension=embeddings.shape[1])
@@ -154,6 +139,63 @@ class SuadeoRAGService:
         
         # Save index
         self.vector_store.save(self.index_path)
+    
+    async def _update_index(self, new_chunks: List[Dict]):
+        """Update existing vector index with new or updated chunks"""
+        if not new_chunks:
+            logger.info("No new chunks to update")
+            return
+        
+        texts = [chunk['content'] for chunk in new_chunks]
+        if not texts:
+            logger.warning("No searchable content in new chunks")
+            return
+        
+        logger.info(f"Updating index with {len(texts)} new chunks...")
+        
+        # Create embeddings for new chunks
+        embeddings = self.embeddings.embed_batch(texts, batch_size=50)
+        
+        # Add new vectors to existing index
+        self.vector_store.add_vectors(embeddings, new_chunks)
+        
+        # Save updated index
+        self.vector_store.save(self.index_path)
+    
+    async def delete_entry(self, dataset_id: str):
+        """
+        Delete an entry from the vector store and RAG data by dataset_id
+        
+        Args:
+            dataset_id: Unique identifier of the dataset to delete
+        """
+        if not self._is_initialized or not self.vector_store:
+            raise IndexNotInitializedError("RAG system not initialized")
+        
+        try:
+            # Remove from rag_data
+            original_len = len(self.rag_data['search_index'])
+            self.rag_data['search_index'] = [
+                chunk for chunk in self.rag_data['search_index']
+                if chunk.get('metadata', {}).get('dataset_id') != dataset_id
+            ]
+            removed_chunks = original_len - len(self.rag_data['search_index'])
+            
+            if removed_chunks == 0:
+                logger.warning(f"No chunks found with dataset_id: {dataset_id}")
+                return
+            
+            # Rebuild vector store from updated rag_data
+            logger.info(f"Removed {removed_chunks} chunks with dataset_id: {dataset_id}. Rebuilding index...")
+            await self._build_new_index(self.rag_data['search_index'])
+            
+            # Save updated rag_data
+            save_rag_data(self.rag_data, "suadeo_catalog_data/rag_data_all.json")
+            logger.info(f"Successfully deleted entries for dataset_id: {dataset_id}")
+            
+        except Exception as e:
+            logger.error(f"Failed to delete entry for dataset_id {dataset_id}: {e}")
+            raise SuadeoRAGException(f"Deletion failed: {e}")
     
     def _assess_context_sufficiency(self, similarities: np.ndarray, retrieved_chunks: List[Dict]) -> bool:
         """
@@ -166,16 +208,9 @@ class SuadeoRAGService:
         Returns:
             Boolean indicating if context is sufficient
         """
-        # Check for high-similarity matches
         high_similarity_count = sum(1 for sim in similarities if sim >= self.config.min_similarity_threshold)
-        
-        # Check for diverse content types
         content_types = set(chunk.get('content_type', 'unknown') for chunk in retrieved_chunks)
-        
-        # Check for enough chunks
         enough_chunks = len(retrieved_chunks) >= self.config.min_context_chunks
-        
-        # Determine sufficiency
         has_relevant_matches = high_similarity_count > 0
         has_sufficient_chunks = enough_chunks and high_similarity_count >= self.config.min_context_chunks
         
@@ -195,59 +230,26 @@ class SuadeoRAGService:
         Returns:
             Generated response
         """
-        # Build context from chunks
         context_parts = []
-        # for chunk in context_chunks:
-        #     context_part = f"[{chunk.get('content_type', 'info')}] {chunk['content']}"
-            
-        #     if chunk.get('metadata', {}).get('dataset_name'):
-        #         context_part += f" (Dataset: {chunk['metadata']['dataset_name']})"
-        #         context_part+= f"All Metadata: {chunk.get('metadata','No Metadata avialable')}"
-        #     context_parts.append(context_part)
-        ## Updated Version
         for chunk in context_chunks:
             metadata = chunk.get('metadata', {})
-            
             context_part = f"[{chunk.get('content_type', 'info')}] {chunk['content']}"
-
-            # Include readable metadata
             dataset_name = metadata.get("dataset_name", "Unknown")
             catalog = metadata.get("catalog", "Unknown")
             dataset_id = metadata.get("dataset_id", "Unknown")
             status = metadata.get("status", "Unknown")
             owner = metadata.get("owner", "Unknown")
             language = metadata.get("language", "Unknown")
-
-            context_part += f"\n(Dataset: {dataset_name}, Catalog: {catalog}, ID: {dataset_id}, Status: {status}, Owner: {owner}, Language: {language})"
-
-            # Optionally include domains or other nested metadata
+            source_endpoint = metadata.get("source_endpoint", "Unknown")
+            context_part += f"\n(Dataset: {dataset_name}, Catalog: {catalog}, ID: {dataset_id}, Status: {status}, Owner: {owner}, Language: {language}, Source Endpoint: {source_endpoint})"
             if domains := metadata.get("domains"):
                 context_part += f"\nDomains: {', '.join(domains)}"
-
             context_parts.append(context_part)
         context = "\n\n".join(context_parts)
-
         
         logger.debug(f"Generated context: {context}\n\n")
         
-        # Create prompt for LLM
-        # prompt = f"""Based on the following context from our data catalog, please answer the user's question.
-
-        #             Context:
-        #             {context}
-
-        #             Question: {query}
-
-        #             Instructions:
-        #             - Answer based only on the provided context
-        #             - If the context doesn't contain enough information, say so clearly
-        #             - Be specific and mention relevant datasets when applicable
-        #             - Keep the answer concise but informative
-
-        #             Answer:"""
-
-        ## Updated prompt
-        prompt = f"""Based on the following dataset documentation and metadata, answer the user's question.
+        prompt = f"""Based on the following dataset documentation and metadata, answer the user's question in detail way. 
 
                 Context:
                 {context}
@@ -257,14 +259,11 @@ class SuadeoRAGService:
                 Instructions:
                 - Use only the information provided in the context
                 - If insufficient, explicitly say so
-                - Mention dataset names and details (e.g., catalog, owner, status) when possible
+                - Mention dataset names, languages, source endpoints, dataset id and details (e.g., catalog, owner, status, source endpoint) when possible
                 - Be concise but detailed
 
                 Answer:"""
-
-
-
-        # Call Ollama LLM
+        
         try:
             response = requests.post(
                 f"{self.config.ollama_base_url}/api/generate",
@@ -304,33 +303,26 @@ class SuadeoRAGService:
         logger.info(f"Processing search query: {query}")
         
         try:
-            # Step 1: Create query embedding
             query_embedding = self.embeddings.embed_text(query)
-            
-            # Step 2: Search vector store
             similarities, indices, retrieved_chunks = self.vector_store.search(query_embedding, k=k)
-            
-            # Step 3: Assess context sufficiency
             has_sufficient_context = self._assess_context_sufficiency(similarities, retrieved_chunks)
             
-            # Step 4: Filter relevant chunks
             relevant_chunks = []
             relevant_sources = []
-            
             for sim, chunk in zip(similarities, retrieved_chunks):
                 if sim >= self.config.min_similarity_threshold:
                     relevant_chunks.append(chunk)
-                    catalog_value = chunk.get('metadata', {}).get('catalog') or 'Unknown'
+                    catalog_value = chunk.get('metadata', {}).get('catalog', 'Unknown')
+                    source_endpoint = chunk.get('metadata', {}).get('source_endpoint', 'Unknown')
                     relevant_sources.append({
                         'dataset_name': chunk.get('metadata', {}).get('dataset_name', 'Unknown'),
                         'content_type': chunk.get('content_type', 'unknown'),
                         'similarity': float(sim),
-                        'catalog': catalog_value,  #chunk.get('metadata', {}).get('catalog', 'Unknown')
-                        # 'chunk_text': chunk.get('content', '')  # ADD THE CHUNK CONTENT HERE
+                        'catalog': catalog_value,
+                        'source_endpoint': source_endpoint,
                         'chunk': chunk
                     })
             
-            # Step 5: Generate response if we have sufficient context
             if has_sufficient_context and relevant_chunks:
                 answer = self._generate_response(query, relevant_chunks)
                 confidence = float(np.mean([sim for sim in similarities if sim >= self.config.min_similarity_threshold]))

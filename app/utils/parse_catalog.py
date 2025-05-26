@@ -1,34 +1,37 @@
 import json
 from typing import List, Dict, Any, Optional
 from datetime import datetime
+import os
 
 from app.utils.logging import get_logger
 
 # Create a logger specific to this module
 logger = get_logger("app.routers.parse_catalog")
 
-def parse_catalog_for_rag(catalog_response: List[Dict]) -> Dict[str, Any]:
+def parse_catalog_for_rag(catalog_response: List[Dict], source_endpoint: str) -> Dict[str, Any]:
     """
     Parse catalog response into RAG-optimized format
     
     Args:
         catalog_response: Raw catalog response from API
+        source_endpoint: API endpoint from which the data was fetched
         
     Returns:
         Dict containing structured data optimized for RAG applications
     """
     
-    # Initializeing the RAG-optimized structure
+    # Initialize the RAG-optimized structure
     rag_data = {
         "metadata": {
             "total_datasets": len(catalog_response),
             "parsed_at": datetime.now().isoformat(),
             "active_datasets": 0,
             "catalogs": set(),
-            "domains": set()
+            "domains": set(),
+            "source_endpoint": source_endpoint
         },
         "datasets": [],
-        "search_index": []  # Flattened data for vector search
+        "search_index": []
     }
     
     for item in catalog_response:
@@ -44,7 +47,7 @@ def parse_catalog_for_rag(catalog_response: List[Dict]) -> Dict[str, Any]:
         if item.get('catalog'):
             rag_data["metadata"]["catalogs"].add(item['catalog'])
         
-        domains = item.get('domains', []) # Almost all of the domains are empty list
+        domains = item.get('domains', [])
         for domain in domains:
             rag_data["metadata"]["domains"].add(domain)
         
@@ -53,7 +56,7 @@ def parse_catalog_for_rag(catalog_response: List[Dict]) -> Dict[str, Any]:
         rag_data["datasets"].append(dataset)
         
         # Create search index entries
-        search_entries = create_search_entries(dataset)
+        search_entries = create_search_entries(dataset, source_endpoint)
         rag_data["search_index"].extend(search_entries)
     
     # Convert sets to lists for JSON serialization
@@ -69,7 +72,7 @@ def parse_single_dataset(item: Dict) -> Dict[str, Any]:
     descriptions = {}
     for desc in item.get('descriptions', []):
         lang_code = desc.get('isoCode', 'unknown')
-        descriptions[lang_code] = desc.get('text', '') ## This should work
+        descriptions[lang_code] = desc.get('text', '')
     
     # Extract owner information
     owner = item.get('owner', {})
@@ -78,10 +81,10 @@ def parse_single_dataset(item: Dict) -> Dict[str, Any]:
         "account": owner.get('account', ''),
         "email": owner.get('eMail', ''),
         "authentication": owner.get('authentication', ''),
-        "is_group": owner.get('isGroup', False) # first name and last name is omitted...
+        "is_group": owner.get('isGroup', False)
     }
     
-    # Extract stewards information ## Almost all of them are empty, so not sure even if the keys could match
+    # Extract stewards information
     stewards = []
     for steward in item.get('stewards', []):
         stewards.append({
@@ -121,7 +124,7 @@ def parse_single_dataset(item: Dict) -> Dict[str, Any]:
     
     return dataset
 
-def create_search_entries(dataset: Dict) -> List[Dict]:
+def create_search_entries(dataset: Dict, source_endpoint: str) -> List[Dict]:
     """Create search index entries for RAG applications"""
     
     search_entries = []
@@ -132,7 +135,8 @@ def create_search_entries(dataset: Dict) -> List[Dict]:
         "catalog": dataset["catalog"],
         "domains": dataset["domains"],
         "status": dataset["status_text"],
-        "owner": dataset["owner"]["display_name"]
+        "owner": dataset["owner"]["display_name"],
+        "source_endpoint": source_endpoint
     }
     
     # Create entry for dataset name and basic info
@@ -145,7 +149,7 @@ def create_search_entries(dataset: Dict) -> List[Dict]:
     
     # Create entries for each language description
     for lang_code, description in dataset["descriptions"].items():
-        if description.strip():  # Only include non-empty descriptions
+        if description.strip():
             search_entries.append({
                 "id": f"{dataset['id']}_{lang_code}",
                 "content_type": "description",
@@ -177,11 +181,28 @@ def get_status_text(status_code: int) -> str:
     }
     return status_map.get(status_code, "unknown")
 
+
 def save_rag_data(rag_data: Dict, filename: str = "catalog_rag_data.json"):
-    """Save the RAG-optimized data to a JSON file"""
-    with open(filename, 'w', encoding='utf-8') as f:
-        json.dump(rag_data, f, indent=2, ensure_ascii=False)
-    print(f"RAG data saved to {filename}")
+    """
+    Save the RAG-optimized data to a JSON file
+
+    Args:
+        rag_data: Dictionary containing RAG-optimized data
+        filename: Path to the output JSON file
+    """
+    try:
+        # Ensure the directory exists
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
+        
+        # Save the data to the JSON file
+        with open(filename, 'w', encoding='utf-8') as f:
+            json.dump(rag_data, f, indent=2, ensure_ascii=False)
+        logger.info(f"RAG data saved to {filename}")
+        
+    except Exception as e:
+        logger.error(f"Failed to save RAG data to {filename}: {e}")
+        raise IOError(f"Failed to save RAG data to {filename}: {str(e)}")
+    
 
 def get_search_content_only(rag_data: Dict) -> List[str]:
     """Extract just the content for vector embedding"""
