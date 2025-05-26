@@ -96,6 +96,8 @@ logs/
 catalog_rag_data.json
 coordinate_corrections.html
 suadeo_catalog_data/
+## Vector Stores
+vector_stores/*
 token.txt
 test_suadeo_search.py
 # Ignore virtual environments (redundant, but explicit here)
