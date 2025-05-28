@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
 from fastapi.responses import JSONResponse
-import logging
+from app.utils.query_classification import generate_multilingual_rag_response, create_optimized_english_search_query, detect_language, classify_query, create_greeting_response, classify_relevance, create_irrelevant_response
+
 from app.models.suadeo_models import (
     SuadeoSearchRequest, 
     SuadeoSearchResponse, 
@@ -25,28 +26,41 @@ logger = get_logger("app.routers.suadeo_search")
 # Initialize router
 router = APIRouter(prefix="", tags=["Suadeo search"])
 
-# Global RAG service instance (you might want to use dependency injection)
-_rag_service: SuadeoRAGService = None
-
+from app.services.rag_services  import rag_manager
 async def get_rag_service() -> SuadeoRAGService:
     """Dependency to get RAG service instance"""
-    global _rag_service
     
-    if _rag_service is None:
-        # Initialize with default config
-        config = SuadeoRAGConfig()
-        _rag_service = SuadeoRAGService(config)
+    # Check if service is ready
+    if rag_manager.is_ready():
+        return rag_manager.get_service()
+    
+    # Check if service is currently initializing
+    if rag_manager.is_initializing():
+        raise HTTPException(
+            status_code=503,
+            detail="RAG service is currently initializing. Please try again in a few moments."
+        )
+    
+    # Try to initialize if not ready and not initializing
+    try:
+        logger.warning("RAG service not initialized during startup, attempting initialization...")
+        success = await rag_manager.initialize_service()
         
-        try:
-            await _rag_service.initialize()
-        except Exception as e:
-            logger.error(f"Failed to initialize RAG service: {e}")
+        if success and rag_manager.is_ready():
+            logger.info("RAG service initialized successfully on demand")
+            return rag_manager.get_service()
+        else:
             raise HTTPException(
                 status_code=500,
-                detail=f"RAG service initialization failed: {str(e)}"
+                detail="RAG service initialization failed"
             )
-    
-    return _rag_service
+            
+    except Exception as e:
+        logger.error(f"Failed to initialize RAG service on demand: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"RAG service initialization failed: {str(e)}"
+        )
 
 @router.post("/suadeo_search", response_model=SuadeoSearchResponse)
 async def suadeo_search(
@@ -54,48 +68,117 @@ async def suadeo_search(
     rag_service: SuadeoRAGService = Depends(get_rag_service)
 ):
     """
-    Search the Suadeo catalog using RAG
+    Search the Suadeo catalog using RAG with guardrails
     
     This endpoint performs semantic search across your Suadeo data catalog
     and provides AI-generated responses with source references.
     """
     try:
+
         logger.info(f"Received search request: {request.query}")
         
-        # Perform RAG search
-        rag_response = await rag_service.search(
-            query=request.query,
+        # Detect the language of the query
+        detected_language = await detect_language(request.query)
+        logger.info(f"Detected language: {detected_language}")
+        
+        # First, classify if the query is a greeting
+        greeting_classification = await classify_query(request.query)
+        logger.info(f"Greeting classification: is_greeting={greeting_classification.is_greeting}, confidence={greeting_classification.confidence}")
+        
+        # If it's a greeting with high confidence, return welcome message
+        if greeting_classification.is_greeting and greeting_classification.confidence > 0.7:
+            logger.info("Responding with greeting message")
+            return await create_greeting_response(request.query)
+        
+        # If not a greeting, check if it's relevant to Suadeo catalog
+        relevance_classification = await classify_relevance(request.query)
+        logger.info(f"Relevance classification: is_relevant={relevance_classification.is_relevant}, confidence={relevance_classification.confidence}")
+        
+        # If not relevant with high confidence, return guidance message
+        if not relevance_classification.is_relevant and relevance_classification.confidence >= 0.7:
+            logger.info("Query deemed irrelevant to Suadeo catalog")
+            return await create_irrelevant_response(request.query, relevance_classification.suggested_topics)
+        
+        # If borderline relevance (low confidence), log but proceed with search
+        if relevance_classification.confidence < 0.6:
+            logger.warning(f"Low confidence relevance classification: {relevance_classification.confidence}")
+        
+        # Create optimized English search query for FAISS vector search
+        optimized_search_query = await create_optimized_english_search_query(request.query, detected_language)
+        logger.info(f"Using optimized search query: '{optimized_search_query}'")
+        
+        # Proceed with RAG search using optimized English query
+        logger.info("Proceeding with RAG search")
+        
+        # Create a modified request with the optimized query for RAG search
+        optimized_request = SuadeoSearchRequest(
+            query=optimized_search_query,
             k=request.k
         )
         
+        # Perform RAG search with optimized English query
+        rag_response = await rag_service.search(
+            query=optimized_request.query,
+            k=optimized_request.k
+        )
+        
+        logger.info(f"RAG search completed successfully\nRAG Results: {rag_response}\n\nNow Generating the Multilingual RAG Response: \n")
+        # # Generate response in the original language using RAG results
+        logger.info("Generating multilingual RAG response...")
+        multilingual_answer = await generate_multilingual_rag_response(
+            original_query=request.query,
+            rag_results={
+                'answer': rag_response.answer,
+                # 'sources': rag_response.sources, 
+                'sources': [
+                    {
+                        'dataset_name': source.get('dataset_name'),
+                        'content_type': source.get('content_type'),
+                        'similarity': source.get('similarity'),
+                        'catalog': source.get('catalog'),
+                        'source_endpoint': source.get('source_endpoint'),
+                        'source_endpoint_type': source.get('source_endpoint_type'),
+                        'chunk': source.get('chunk')
+                    }
+                    for source in rag_response.sources
+                ],
+
+                'confidence': rag_response.confidence,
+                'has_sufficient_context': rag_response.has_sufficient_context
+            },
+            detected_language=detected_language,
+            optimized_query=optimized_search_query
+        )
+
+        logger.info(f"Generated multilingual RAG response in {detected_language}\n{multilingual_answer}\n\nConverting this to api response format...")
         # Convert to API response format
         sources = [
             SearchSource(
                 dataset_name=source['dataset_name'],
                 content_type=source['content_type'],
                 similarity=source['similarity'],
-                # catalog=source['catalog'],
                 catalog=source['catalog'] or 'Unknown',
                 source_endpoint=source['source_endpoint'],
                 source_endpoint_type=source['source_endpoint_type'],
-                chunk=source['chunk']  # or chunk_text=source['chunk']['content']
-                # chunk_text=source['chunk_text']  # MAP THIS TOO
+                chunk=source['chunk']
             )
             for source in rag_response.sources
         ]
+        ## TODO: Change the response structure according to the required need...
         
         response = SuadeoSearchResponse(
-            answer=rag_response.answer,
+            answer=multilingual_answer, #rag_response.answer,#,  # Use the multilingual response
             confidence=rag_response.confidence,
             sources=sources,
             has_sufficient_context=rag_response.has_sufficient_context,
-            query=request.query,
+            query=request.query,  # Keep original query for reference
             total_chunks_found=len(rag_response.retrieved_chunks)
         )
         
-        logger.info(f"Search completed successfully. Confidence: {response.confidence:.2f}")
+        logger.info(f"Search completed successfully. Confidence: {response.confidence:.2f}, Language: {detected_language}\n\nHere is the final Response")
         return response
-        
+    
+
     except IndexNotInitializedError as e:
         logger.error(f"Index not initialized: {e}")
         raise HTTPException(
@@ -123,6 +206,7 @@ async def suadeo_search(
             status_code=500,
             detail="An unexpected error occurred during search"
         )
+    
 
 @router.get("/suadeo_search_status")
 async def get_system_status(

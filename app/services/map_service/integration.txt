@@ -1,0 +1,16 @@
+#import 
+
+from .map_service.pipeline import GeoPipeline
+
+
+# Init
+
+self.pipeline = GeoPipeline()
+
+# Usage
+result = self.pipeline.run(query)
+# json_result= json.dumps(result["geojson"], indent=2, ensure_ascii=False) 
+return {
+"geojson":result["geojson"],
+"citations": []
+}

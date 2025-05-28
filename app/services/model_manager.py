@@ -306,7 +306,7 @@ class DynamicModelManager:
 # Initialize the service with reasonable defaults
 model_manager = DynamicModelManager(
     base_url=settings.ollama_base_url,
-    preload_models=[settings.ollama_model],  # Preload only the chat model
+    preload_models=[settings.ollama_model, settings.ollama_greeting_model],  # Preload only the chat model
     interval=3600,  # 1 hour ping interval
     memory_threshold=0.85,  # Free memory if usage exceeds 85%
     max_models=3  # Maximum number of models to keep loaded simultaneously

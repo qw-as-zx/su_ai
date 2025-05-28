@@ -1,0 +1,34 @@
+{
+   "oid":1372,
+   "key":"bxOYsPXg",
+   "sortIndex":0,
+   "name":"04 VIE POLITIQUE",
+   "descriptions":[
+      
+   ],
+   "owner":{
+      "authentication":"DEMOKEYCLOAK",
+      "account":"DEMO",
+      "displayName":"DEMO",
+      "fistName":"",
+      "lastName":"",
+      "eMail":"",
+      "isGroup":false,
+      "logonName":"None"
+   },
+   "stewards":[
+      
+   ],
+   "domains":[
+      
+   ],
+   "catalog":"",
+   "favorite":false,
+   "userId":-1,
+   "canRead":true,
+   "canEdit":true,
+   "parentKey":"None",
+   "type":11,
+   "restAPI":false,
+   "provider":"None"
+}

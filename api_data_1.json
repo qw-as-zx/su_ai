@@ -1,0 +1,78 @@
+{
+   "oid":889,
+   "key":"AFG3GlS3",
+   "sortIndex":0,
+   "name":"SIRH",
+   "descriptions":[
+      {
+         "isoCode":"fr",
+         "text":"Donnée du SIRH est un objet de conception de données utilisateur qui centralise les informations des employés pour les systèmes d\\'information des ressources humaines (SIRH). Les champs clés dans la table \"sirh_employe\" incluent \"IdEmploye,\" \"Prenom,\" \"Nom,\" et \"Adresse,\" garantissant une couverture complète des données. Le jeu de données capture également des détails de contact essentiels tels que \"Email\" et \"Telephone,\" ainsi que des informations financières comme \"Iban.\" Les données liées aux contrats, notamment \"DateDebutContrat\" et \"DateFinContrat,\" sont organisées pour une gestion efficace. Avec une mise en page visuellement claire utilisant des couleurs primaires, ce jeu de données soutient des processus RH efficaces, permettant un suivi et une gestion précis des informations des employés au sein d\\'une organisation."
+      },
+      {
+         "isoCode":"en",
+         "text":"Donnée du SIRH is a user-centric data set designed for managing employee information within organizations. It includes various fields such as employee ID, first name, last name, address, email, phone number, and IBAN, each tagged for personal data privacy and confidentiality compliance. The dataset also captures job-related details like position and contract start and end dates. It ensures data quality and evolves as per organizational needs, making it an essential tool for human resources. With focus on data integrity and protection under GDPR guidelines, this comprehensive framework supports decision-making and operational efficiency within HR departments."
+      },
+      {
+         "isoCode":"es",
+         "text":"Donnée du SIRH es un objeto de diseño de datos de usuario que centraliza la información de los empleados para los Sistemas de Información de Recursos Humanos (HRIS). Los campos clave dentro de la tabla \"sirh_employe\" incluyen \"IdEmploye,\" \"Prenom,\" \"Nom,\" y \"Adresse,\" asegurando una cobertura de datos integral. El conjunto de datos también captura detalles de contacto cruciales como \"Email\" y \"Telephone,\" e información financiera como \"Iban.\" Los datos relacionados con el contrato, incluyendo \"DateDebutContrat\" y \"DateFinContrat,\" están organizados para una gestión eficiente. Con un diseño visualmente claro utilizando colores primarios, este conjunto de datos apoya procesos RH efectivos, permitiendo un seguimiento y gestión precisos de la información de los empleados dentro de una organización."
+      },
+      {
+         "isoCode":"de",
+         "text":"Donnée du SIRH ist ein Benutzerdaten-Designobjekt, das Mitarbeiterinformationen für Human Resources Information Systems (HRIS) zentralisiert. Schlüsselfelder innerhalb der Tabelle \"sirh_employe\" umfassen \"IdEmploye,\" \"Prenom,\" \"Nom,\" und \"Adresse,\" wodurch eine umfassende Datenabdeckung gewährleistet wird. Der Datensatz erfasst auch entscheidende Kontaktdaten wie \"Email\" und \"Telephone,\" sowie finanzielle Informationen wie \"Iban.\" Vertragsbezogene Daten, einschließlich \"DateDebutContrat\" und \"DateFinContrat,\" sind zur effizienten Verwaltung organisiert. Mit einem visuell klaren Layout, das primäre Farben verwendet, unterstützt dieser Datensatz effektive HR-Prozesse und ermöglicht das präzise Tracking und Management von Mitarbeiterinformationen innerhalb einer Organisation."
+      }
+   ],
+   "owner":{
+      "authentication":"DEMOKEYCLOAK",
+      "account":"DEMO",
+      "displayName":"DEMO",
+      "fistName":"",
+      "lastName":"",
+      "eMail":"",
+      "isGroup":false,
+      "logonName":"None"
+   },
+   "stewards":[
+      {
+         "authentication":"DemoKeycloak",
+         "account":"benoit.depont@gmail.com",
+         "displayName":"Benoit DUPONT",
+         "fistName":"Benoit",
+         "lastName":"DUPONT",
+         "eMail":"",
+         "isGroup":false,
+         "logonName":"DemoKeycloak\\benoit.depont@gmail.com"
+      },
+      {
+         "authentication":"DemoKeycloak",
+         "account":"charles@gmail.com",
+         "displayName":"Charler TATA",
+         "fistName":"Charler",
+         "lastName":"TATA",
+         "eMail":"",
+         "isGroup":false,
+         "logonName":"DemoKeycloak\\charles@gmail.com"
+      },
+      {
+         "authentication":"DemoKeycloak",
+         "account":"eric@gmail.com",
+         "displayName":"Eric TARNA",
+         "fistName":"Eric",
+         "lastName":"TARNA",
+         "eMail":"",
+         "isGroup":false,
+         "logonName":"DemoKeycloak\\eric@gmail.com"
+      }
+   ],
+   "domains":[
+      "Gouvernance & Stratégie"
+   ],
+   "catalog":"RH",
+   "favorite":false,
+   "userId":-1,
+   "canRead":true,
+   "canEdit":false,
+   "parentKey":"None",
+   "type":4,
+   "restAPI":true,
+   "provider":"None"
+}

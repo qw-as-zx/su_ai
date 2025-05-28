@@ -92,7 +92,7 @@ class FAISSVectorStore:
             
             # Get metadata for results
             result_metadata = [self.metadata[idx] for idx in indices[0] if idx < len(self.metadata)]
-            
+            logger.info(f"Search completed. Found {len(result_metadata)} results.\nSearch Results: (similaritys, index) {similarities[0], indices[0]}\nMeta_data={result_metadata}\n")
             return similarities[0], indices[0], result_metadata
             
         except Exception as e:

@@ -3,10 +3,30 @@ import json
 import logging
 from typing import Dict, Any, Optional
 
-from app.utils.logging import get_logger
+import os
 
-# Create a logger specific to this module
-logger = get_logger("app.routers.suadeo_utils")
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('suadeo_api.log'),
+        logging.StreamHandler()
+    ]
+)
+
+logger = logging.getLogger(__name__)
+
+
+class SuadeoRAGException(Exception):
+    """Base exception for Suadeo RAG operations"""
+    pass
+
+
+class CatalogDataError(SuadeoRAGException):
+    """Raised when catalog data is invalid or missing"""
+    pass
+
 
 def get_token(base_url: str) -> Optional[str]:
     """
@@ -112,3 +132,77 @@ def fetch_catalog_data(endpoint: str, api_url: str = "https://webclient-demo.sua
     
     logger.info("Successfully fetched catalog data")
     return catalog_data
+
+
+
+def save_rag_data(rag_data: Dict, filename: str = "catalog_rag_data.json"):
+    """
+    Save the RAG-optimized data to a JSON file
+
+    Args:
+        rag_data: Dictionary containing RAG-optimized data
+        filename: Path to the output JSON file
+    """
+    try:
+        # Ensure the directory exists
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
+        
+        # Save the data to the JSON file
+        with open(filename, 'w', encoding='utf-8') as f:
+            json.dump(rag_data, f, indent=2, ensure_ascii=False)
+        logger.info(f"RAG data saved to {filename}")
+        
+    except Exception as e:
+        logger.error(f"Failed to save RAG data to {filename}: {e}")
+        raise IOError(f"Failed to save RAG data to {filename}: {str(e)}")
+
+
+
+## Usage:
+# these are the endpoints
+endpoints = {
+    "api/administration/userdata": "4",
+    "api/administration/catalogs": "15",
+    "api/BusinessGlossary": "11",
+    "api/administration/connections": "5"
+}
+
+# Aggregate data from all endpoints
+all_search_chunks = []
+for endpoint_url, endpoint_type in endpoints.items():
+    logger.info(f"Fetching catalog data from {endpoint_url}...")
+    # Fetch the data for each endpoint
+    catalog_data = fetch_catalog_data(endpoint_url)
+    
+    if not catalog_data:
+        logger.warning(f"No data retrieved from {endpoint_url}")
+        continue
+    
+    # Process catalog data for RAG
+    rag_data = self._process_catalog_data(catalog_data, endpoint_url, endpoint_type)
+    
+    if rag_data and 'search_index' in rag_data:
+        all_search_chunks.extend(rag_data['search_index'])
+        logger.info(f"Collected {len(rag_data['search_index'])} chunks from {endpoint_url}")
+    
+    # Save individual endpoint data
+    safe_filename = endpoint_url.replace('/', '_')
+    save_rag_data(rag_data, f"suadeo_catalog_data/rag_data_{safe_filename}.json")
+
+# Update self.rag_data with all collected chunks
+rag_data['search_index'] = all_search_chunks
+save_rag_data(self.rag_data, self.rag_data_path)
+
+# Build new vector index
+if all_search_chunks:
+    logger.info("Building new vector index...")
+    await self._build_new_index(all_search_chunks)
+else:
+    raise CatalogDataError("No search chunks available to build index")
+
+self._is_initialized = True
+logger.info(f"RAG system initialized successfully with {len(all_search_chunks)} total chunks")
+    
+except Exception as e:
+logger.error(f"Failed to initialize RAG system: {e}")
+raise SuadeoRAGException(f"Initialization failed: {e}")

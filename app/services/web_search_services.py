@@ -7,6 +7,7 @@ from app.utils.config import settings
 from app.utils.redis_client import redis_client
 from app.utils.logging import get_logger
 from app.utils.geojson_utils import extract_geojson_from_markdown, verify_and_correct_coordinates, visualize_geojson_comparison
+# from .map_service.pipeline import GeoPipeline
 
 # Create a logger specific to this module
 logger = get_logger("app.services.web_search_service")
@@ -16,6 +17,7 @@ class WebSearchService:
     def __init__(self):
         # OpenAI API key for web search
         self.client = AsyncOpenAI(api_key=settings.openai_api_key)
+        # self.pipeline = GeoPipeline()
 
     async def perform_web_search(
         self,
@@ -112,7 +114,6 @@ class WebSearchService:
 
 
     ## V3
-
     async def perform_map_search(
         self,
         query: str,
@@ -226,6 +227,14 @@ class WebSearchService:
                         "geojson": corrected_geojson,
                         "citations": citations
                     }
+                    
+                    ### New Map Search Version
+                    # result = self.pipeline.run(query)
+                    # # json_result= json.dumps(result["geojson"], indent=2, ensure_ascii=False) 
+                    # return {
+                    # "geojson":result["geojson"],
+                    # "citations": []
+                    # }
 
                 except OpenAIError as e:
                     if "rate_limit" in str(e).lower():

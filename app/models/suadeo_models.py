@@ -38,6 +38,20 @@ class SuadeoRAGConfig(BaseModel):
     min_context_chunks: int = settings.min_context_chunks
     index_rebuild_threshold: int = settings.index_rebuild_threshold
 
+class QueryClassification(BaseModel):
+    is_greeting: bool
+    confidence: float
+    classification_reason: str
+
+
+class RelevanceClassification(BaseModel):
+    is_relevant: bool
+    confidence: float
+    classification_reason: str
+    suggested_topics: list[str] = []
+
+    
+
 @dataclass
 class RAGResponse:
     """Internal RAG response structure"""
@@ -46,3 +60,5 @@ class RAGResponse:
     sources: List[Dict]
     has_sufficient_context: bool
     retrieved_chunks: List[Dict]
+
+

@@ -38,10 +38,76 @@ class SuadeoRAGService:
         self.vector_store: Optional[FAISSVectorStore] = None
         self.rag_data: Dict = {'search_index': []}
         self.index_path = "suadeo_catalog_data/suadeo_index"
+        self.rag_data_path = "suadeo_catalog_data/rag_data_all.json"
         self._is_initialized = False
         
         logger.info("Initialized Suadeo RAG Service")
     
+    def _check_existing_index(self) -> bool:
+        """
+        Check if existing vector index and RAG data are available and valid
+        
+        Returns:
+            True if valid existing index exists, False otherwise
+        """
+        try:
+            # Check if all required files exist
+            faiss_index_path = f"{self.index_path}.faiss"
+            faiss_metadata_path = f"{self.index_path}.pkl"
+            
+            if not all([
+                os.path.exists(faiss_index_path),
+                os.path.exists(faiss_metadata_path),
+                os.path.exists(self.rag_data_path)
+            ]):
+                logger.info("Some required index files are missing")
+                return False
+            
+            # Check if files are not empty
+            if (os.path.getsize(faiss_index_path) == 0 or 
+                os.path.getsize(faiss_metadata_path) == 0 or
+                os.path.getsize(self.rag_data_path) == 0):
+                logger.warning("Some index files are empty")
+                return False
+            
+            # Load and validate RAG data
+            with open(self.rag_data_path, 'r', encoding='utf-8') as f:
+                rag_data = json.load(f)
+                
+            if not rag_data.get('search_index') or len(rag_data['search_index']) == 0:
+                logger.warning("RAG data file exists but contains no search index")
+                return False
+            
+            logger.info(f"Found existing index with {len(rag_data['search_index'])} chunks")
+            return True
+            
+        except Exception as e:
+            logger.warning(f"Error checking existing index: {e}")
+            return False
+    
+    def _load_rag_data(self) -> bool:
+        """
+        Load existing RAG data from file
+        
+        Returns:
+            True if successfully loaded, False otherwise
+        """
+        try:
+            with open(self.rag_data_path, 'r', encoding='utf-8') as f:
+                self.rag_data = json.load(f)
+                
+            if not self.rag_data.get('search_index'):
+                self.rag_data['search_index'] = []
+                return False
+                
+            logger.info(f"Loaded {len(self.rag_data['search_index'])} chunks from existing RAG data")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to load RAG data: {e}")
+            self.rag_data = {'search_index': []}
+            return False
+
     async def initialize(self, force_rebuild: bool = False):
         """
         Initialize the RAG system with catalog data from all endpoints
@@ -50,6 +116,28 @@ class SuadeoRAGService:
             force_rebuild: Whether to force rebuild the index
         """
         try:
+            # Check for existing index first
+            has_existing_index = self._check_existing_index()
+            
+            if has_existing_index and not force_rebuild:
+                logger.info("Found existing vector index, loading...")
+                
+                # Load existing RAG data
+                if self._load_rag_data():
+                    # Load vector store
+                    await self._load_existing_index()
+                    self._is_initialized = True
+                    logger.info(f"RAG system loaded successfully with {len(self.rag_data['search_index'])} chunks")
+                    return
+                else:
+                    logger.warning("Failed to load RAG data, will rebuild index")
+            
+            if force_rebuild:
+                logger.info("Force rebuild requested, rebuilding index...")
+            else:
+                logger.info("No valid existing index found, building new index...")
+            
+            # Fetch and process catalog data
             endpoints = {
                 "api/administration/userdata": "4",
                 "api/administration/catalogs": "15",
@@ -68,8 +156,6 @@ class SuadeoRAGService:
                     continue
                 
                 # Process catalog data for RAG
-                # Pass both endpoint URL and ID if needed
-                endpoint_info = {"url": endpoint_url, "id": endpoint_type}
                 rag_data = self._process_catalog_data(catalog_data, endpoint_url, endpoint_type)
                 
                 if rag_data and 'search_index' in rag_data:
@@ -82,17 +168,14 @@ class SuadeoRAGService:
 
             # Update self.rag_data with all collected chunks
             self.rag_data['search_index'] = all_search_chunks
-            save_rag_data(self.rag_data, "suadeo_catalog_data/rag_data_all.json")
+            save_rag_data(self.rag_data, self.rag_data_path)
             
-            # Load or build vector index
-            if os.path.exists(f"{self.index_path}.faiss") and not force_rebuild:
-                logger.info("Loading existing vector index...")
-                await self._load_existing_index()
-                # Update index with new or updated chunks
-                await self._update_index(all_search_chunks)
-            else:
+            # Build new vector index
+            if all_search_chunks:
                 logger.info("Building new vector index...")
                 await self._build_new_index(all_search_chunks)
+            else:
+                raise CatalogDataError("No search chunks available to build index")
             
             self._is_initialized = True
             logger.info(f"RAG system initialized successfully with {len(all_search_chunks)} total chunks")
@@ -108,6 +191,7 @@ class SuadeoRAGService:
         Args:
             catalog_data: Raw catalog data from API
             source_endpoint: API endpoint from which the data was fetched
+            source_type: Type identifier for the endpoint
             
         Returns:
             Processed RAG data
@@ -117,9 +201,14 @@ class SuadeoRAGService:
     
     async def _load_existing_index(self):
         """Load existing vector index"""
-        sample_embedding = self.embeddings.embed_text("sample text for dimension")
-        self.vector_store = FAISSVectorStore(dimension=len(sample_embedding))
-        self.vector_store.load(self.index_path)
+        try:
+            sample_embedding = self.embeddings.embed_text("sample text for dimension")
+            self.vector_store = FAISSVectorStore(dimension=len(sample_embedding))
+            self.vector_store.load(self.index_path)
+            logger.info("Existing vector index loaded successfully")
+        except Exception as e:
+            logger.error(f"Failed to load existing index: {e}")
+            raise SuadeoRAGException(f"Failed to load existing index: {e}")
     
     async def _build_new_index(self, search_chunks: List[Dict]):
         """Build new vector index from RAG data"""
@@ -133,7 +222,7 @@ class SuadeoRAGService:
         logger.info(f"Creating embeddings for {len(texts)} chunks...")
         
         # Create embeddings for all texts
-        embeddings = self.embeddings.embed_batch(texts, batch_size=200)
+        embeddings = self.embeddings.embed_batch(texts, batch_size=1000)
         
         # Initialize vector store
         self.vector_store = FAISSVectorStore(dimension=embeddings.shape[1])
@@ -143,6 +232,7 @@ class SuadeoRAGService:
         
         # Save index
         self.vector_store.save(self.index_path)
+        logger.info(f"New vector index built and saved with {len(search_chunks)} chunks")
     
     async def _update_index(self, new_chunks: List[Dict]):
         """Update existing vector index with new or updated chunks"""
@@ -151,6 +241,7 @@ class SuadeoRAGService:
             return
         
         texts = [chunk['content'] for chunk in new_chunks]
+        # texts = [chunk for chunk in new_chunks]
         if not texts:
             logger.warning("No searchable content in new chunks")
             return
@@ -158,7 +249,7 @@ class SuadeoRAGService:
         logger.info(f"Updating index with {len(texts)} new chunks...")
         
         # Create embeddings for new chunks
-        embeddings = self.embeddings.embed_batch(texts, batch_size=200)
+        embeddings = self.embeddings.embed_batch(texts, batch_size=1000)
         
         # Add new vectors to existing index
         self.vector_store.add_vectors(embeddings, new_chunks)
@@ -194,7 +285,7 @@ class SuadeoRAGService:
             await self._build_new_index(self.rag_data['search_index'])
             
             # Save updated rag_data
-            save_rag_data(self.rag_data, "suadeo_catalog_data/rag_data_all.json")
+            save_rag_data(self.rag_data, self.rag_data_path)
             logger.info(f"Successfully deleted entries for dataset_id: {dataset_id}")
             
         except Exception as e:
@@ -254,7 +345,8 @@ class SuadeoRAGService:
         
         logger.debug(f"Generated context: {context}\n\n")
         
-        prompt = f"""Based on the following dataset documentation and metadata, answer the user's question in detail way. 
+        prompt = f"""
+                Based on the following dataset documentation and metadata, answer the user's question in detail way. 
 
                 Context:
                 {context}
@@ -288,6 +380,8 @@ class SuadeoRAGService:
         except Exception as e:
             logger.error(f"Error generating response: {e}")
             return "Sorry, there was an error generating the response."
+        
+        
     async def search(self, query: str, k: int = 5) -> RAGResponse:
         """
         Main search method
@@ -353,6 +447,7 @@ class SuadeoRAGService:
                 answer = self._generate_response(query, relevant_chunks)
                 confidence = float(np.mean([sim for sim in similarities if sim >= self.config.min_similarity_threshold]))
             else:
+                
                 answer = "I don't have sufficient information in our catalog to answer this question accurately."
                 confidence = 0.0
             
@@ -379,7 +474,9 @@ class SuadeoRAGService:
         return {
             "initialized": self._is_initialized,
             "vector_store_size": self.vector_store.index.ntotal if self.vector_store else 0,
+            "rag_data_chunks": len(self.rag_data.get('search_index', [])),
             "embedding_model": self.config.embedding_model,
             "llm_model": self.config.llm_model,
-            "index_path": self.index_path
+            "index_path": self.index_path,
+            "has_existing_index": self._check_existing_index()
         }

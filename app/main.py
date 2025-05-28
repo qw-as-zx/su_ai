@@ -8,6 +8,13 @@ from app.utils.logging import get_logger
 from app.services.model_manager import model_manager
 from app.preload import preload_models
 
+from app.services.rag_services import rag_manager
+
+from app.services.suadeo_rag_service import SuadeoRAGService
+from app.models.suadeo_models import SuadeoRAGConfig
+
+
+
 # Create a logger specific to this module
 logger = get_logger("app.services.main")
 
@@ -26,6 +33,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+
 @app.on_event("startup")
 async def startup_event():
     # Start the model management service
@@ -33,6 +42,14 @@ async def startup_event():
     await preload_models()
     model_manager.start()
     logger.info("Application started - dynamic model manager initialized")
+
+    # Initialize RAG service
+    success = await rag_manager.initialize_service(force_rebuild=False)
+    if success:
+        logger.info("Application started - dynamic model manager and RAG service initialized")
+    else:
+        logger.warning("Application started - dynamic model manager initialized, RAG service initialization failed")
+
 
 @app.on_event("shutdown")
 async def shutdown_event():
